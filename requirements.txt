@@ -1,0 +1,14 @@
+ultralytics
+torch
+torchvision
+torchaudio
+opencv-python
+numpy
+matplotlib
+tqdm
+pyyaml
+pandas
+seaborn
+albumentations
+supervision
+roboflow

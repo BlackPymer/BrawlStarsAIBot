@@ -1,0 +1,10 @@
+.venv/
+__pycache__/
+*.pyc
+.DS_Store
+videos/
+runs/
+datasets/
+*.pt
+*.pth
+*.onnx
