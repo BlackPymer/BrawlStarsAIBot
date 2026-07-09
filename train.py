@@ -39,7 +39,6 @@ model.train(
     exist_ok=True,
     patience=PATIENCE,
     lr0=LR0,
-    augment=True,
     hsv_h=HSV_H,
     hsv_s=HSV_S,
     hsv_v=HSV_V,
