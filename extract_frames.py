@@ -2,9 +2,9 @@ import cv2
 from pathlib import Path
 
 VIDEO = Path("videos/Запись экрана 2026-07-07 121042.mp4")
-OUT = Path("datasets/datasetV1/data/images/Train")
+OUT = Path("datasets/datasetV3/images/Train")
 START_FRAME = 300
-NUM_IMAGES = 100
+NUM_IMAGES = 306
 INTERVAL = 6
 
 OUT.mkdir(parents=True, exist_ok=True)

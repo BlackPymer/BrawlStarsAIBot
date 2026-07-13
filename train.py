@@ -1,15 +1,17 @@
+from pathlib import Path
+
 from ultralytics import YOLO
 
-DATA = "datasets/datasetV2/data.yaml"
-MODEL = "yolo26n.pt"
-EPOCHS = 60
-BATCH = 16
+DATA = "datasets/datasetV3/data.yaml"
+MODEL = "yolo26s.pt"
+EPOCHS = 70
+BATCH = 2
 IMSZ = 640
 WORKERS = 4
 DEVICE = 0
 SEED = 42
-PROJECT = "runs/train"
-NAME = "v2"
+PROJECT = str(Path(__file__).parent / "runs/train")
+NAME = "v3"
 PATIENCE = 20
 LR0 = 0.01
 

@@ -75,8 +75,8 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(
         description="Preview augmentations on random samples"
     )
-    parser.add_argument("--img-dir", default="datasets/datasetV2/images/train")
-    parser.add_argument("--lbl-dir", default="datasets/datasetV2/labels/train")
+    parser.add_argument("--img-dir", default="datasets/datasetV3/images/Train")
+    parser.add_argument("--lbl-dir", default="datasets/datasetV3/labels/Train")
     parser.add_argument("--out-dir", default="runs/aug_preview")
     parser.add_argument("--num-samples", type=int, default=5)
     parser.add_argument("--seed", type=int, default=42)

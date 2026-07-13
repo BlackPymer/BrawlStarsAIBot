@@ -4,9 +4,9 @@ from pathlib import Path
 import cv2
 import yaml
 
-DS_DIR = Path("datasets/datasetV2")
-IMG_DIR = DS_DIR / "images" / "train"
-LBL_DIR = DS_DIR / "labels" / "train"
+DS_DIR = Path("datasets/datasetV3")
+IMG_DIR = DS_DIR / "images" / "Train"
+LBL_DIR = DS_DIR / "labels" / "Train"
 YAML_PATH = DS_DIR / "data.yaml"
 NUM_SAMPLES = 10
 OUT_DIR = Path("runs/annotation_check")
