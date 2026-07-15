@@ -57,7 +57,7 @@ def main():
                 x1 = max(0, x1 - PADDING)
                 y1 = max(0, y1 - PADDING)
                 x2 = min(w, x2 + PADDING)
-                y2 = min(h, y2 + PADDING)
+                y2 = min(h, y1 + 64)
 
                 crop = frame[y1:y2, x1:x2]
                 stem = img_path.stem

@@ -21,6 +21,9 @@ class Net(nn.Module):
             nn.Conv2d(256, 512, 3, padding=1),
             nn.ReLU(),
             nn.MaxPool2d((2, 1)),
+            nn.Conv2d(512, 512, 3, padding=1),
+            nn.ReLU(),
+            nn.MaxPool2d((2, 1)),
         )
         self.rnn = nn.LSTM(512, 256, bidirectional=True, batch_first=True)
         
