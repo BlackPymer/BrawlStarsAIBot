@@ -47,10 +47,13 @@ def main():
         results = model.predict(frame, imgsz=640, conf=CONF_THRESHOLD, verbose=False)
 
         player_count = 0
+        enemy_count = 0
         for r in results:
             for box in r.boxes:
                 cls_id = int(box.cls[0])
-                if cls_id != 0:
+                is_player = cls_id == 0
+                is_enemy = cls_id == 1
+                if not (is_player or is_enemy):
                     continue
 
                 x1, y1, x2, y2 = map(int, box.xyxy[0].tolist())
@@ -61,12 +64,18 @@ def main():
 
                 crop = frame[y1:y2, x1:x2]
                 stem = img_path.stem
-                crop_name = f"{stem}_player_{player_count}.jpg"
+
+                if is_player:
+                    crop_name = f"{stem}_player_{player_count}.jpg"
+                    player_count += 1
+                else:
+                    crop_name = f"{stem}_enemy_{enemy_count}.jpg"
+                    enemy_count += 1
+
                 cv2.imwrite(str(OUT_IMAGES / crop_name), crop)
 
                 hp = existing_labels.get(crop_name, "")
                 records.append({"filename": crop_name, "hp": hp})
-                player_count += 1
 
     with open(OUT_LABELS, "w", newline="") as f:
         writer = csv.DictWriter(f, fieldnames=["filename", "hp"])
