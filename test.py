@@ -15,6 +15,7 @@ HP_MODEL_PATH = "hp_ocr_best.pt"
 HP_ONNX_PATH = "en_mobile_model_fixed2.onnx"
 HP_DICT_PATH = "en_mobile_dict.txt"
 HP_PADDING = 10
+HP_DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
 NAMES = {
     0: "player",
@@ -79,14 +80,15 @@ def load_hp_model():
     char_list, blank_idx = load_dict(HP_DICT_PATH)
     model = convert(HP_ONNX_PATH)
     setattr(model, "Softmax/2", torch.nn.Identity())
-    model.load_state_dict(torch.load(HP_MODEL_PATH, map_location="cpu"))
+    model.load_state_dict(torch.load(HP_MODEL_PATH, map_location=HP_DEVICE))
+    model.to(HP_DEVICE)
     model.eval()
     return model, char_list, blank_idx
 
 
 def predict_hp(model, char_list, blank_idx, crop):
     inp = preprocess_hp(crop)
-    inp_tensor = torch.from_numpy(inp).unsqueeze(0)
+    inp_tensor = torch.from_numpy(inp).unsqueeze(0).to(HP_DEVICE)
     with torch.no_grad():
         logits = model(inp_tensor).permute(1, 0, 2)
     pred_ids = logits.argmax(dim=2).permute(1, 0)
@@ -152,7 +154,7 @@ def main():
                             if hp_text:
                                 hp_label = f"HP: {hp_text}"
                                 cv2.putText(frame, hp_label, (x1, y2 + 15),
-                                            cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 1)
+                                            cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 0), 2)
 
             resized = cv2.resize(frame, (out_w, out_h))
             writer.write(resized)
