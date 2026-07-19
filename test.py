@@ -5,7 +5,7 @@ import numpy as np
 import torch
 from onnx2torch import convert
 from ultralytics import YOLO
-
+import time as t
 VIDEO = "videos/Запись экрана 2026-07-07 122233.mp4"
 MODEL = "runs/train/v3/weights/best.pt"
 OUT_DIR = Path("runs/detect/video_test")
@@ -86,14 +86,41 @@ def load_hp_model():
     return model, char_list, blank_idx
 
 
-def predict_hp(model, char_list, blank_idx, crop):
-    inp = preprocess_hp(crop)
-    inp_tensor = torch.from_numpy(inp).unsqueeze(0).to(HP_DEVICE)
+def preprocess_hp_batch(crops, target_h=48):
+    tensors = []
+    for crop in crops:
+        h, w = crop.shape[:2]
+        scale = target_h / h
+        new_w = max(int(w * scale), target_h)
+        resized = cv2.resize(crop, (new_w, target_h), interpolation=cv2.INTER_LINEAR)
+        resized = resized.astype(np.float32) / 255.0
+        resized = (resized - 0.5) / 0.5
+        resized = resized.transpose(2, 0, 1)
+        tensors.append(torch.from_numpy(resized))
+
+    max_w = max(t.shape[2] for t in tensors)
+    padded = []
+    for t in tensors:
+        w = t.shape[2]
+        if w < max_w:
+            pad = torch.zeros((3, 48, max_w - w), dtype=torch.float32)
+            t = torch.cat([t, pad], dim=2)
+        padded.append(t)
+    return torch.stack(padded).to(HP_DEVICE)
+
+
+def predict_hp_batch(model, char_list, blank_idx, crops):
+    if not crops:
+        return []
+    batch = preprocess_hp_batch(crops)
     with torch.no_grad():
-        logits = model(inp_tensor).permute(1, 0, 2)
+        logits = model(batch).permute(1, 0, 2)
     pred_ids = logits.argmax(dim=2).permute(1, 0)
-    hp_text = decode(pred_ids[0].tolist(), char_list, blank_idx)
-    return hp_text
+    results = []
+    for b in range(len(crops)):
+        hp_text = decode(pred_ids[b].tolist(), char_list, blank_idx)
+        results.append(hp_text)
+    return results
 
 
 def main():
@@ -123,6 +150,7 @@ def main():
 
     frame_idx = 0
     processed = 0
+    time = t.time()
     while True:
         ret, frame = cap.read()
         if not ret:
@@ -131,6 +159,8 @@ def main():
         if frame_idx % (SKIP_FRAMES + 1) == 0:
             results = det_model.predict(frame, imgsz=640, conf=0.3, verbose=False)
 
+            hp_crops = []
+            hp_boxes = []
             for r in results:
                 for box in r.boxes:
                     cls_id = int(box.cls[0])
@@ -150,18 +180,23 @@ def main():
                         cy2 = min(h, y1 + 100)
                         crop = frame[cy1:cy2, cx1:cx2]
                         if crop.size > 0:
-                            hp_text = predict_hp(hp_model, char_list, blank_idx, crop)
-                            if hp_text:
-                                hp_label = f"HP: {hp_text}"
-                                cv2.putText(frame, hp_label, (x1, y2 + 15),
-                                            cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 0), 2)
+                            hp_crops.append(crop)
+                            hp_boxes.append((x1, y2))
+
+            if hp_crops:
+                hp_texts = predict_hp_batch(hp_model, char_list, blank_idx, hp_crops)
+                for (x1, y2), hp_text in zip(hp_boxes, hp_texts):
+                    if hp_text:
+                        cv2.putText(frame, f"HP: {hp_text}", (x1, y2 + 15),
+                                    cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 0), 2)
 
             resized = cv2.resize(frame, (out_w, out_h))
             writer.write(resized)
             processed += 1
 
             if processed % 500 == 0:
-                print(f"  Processed {processed} frames ({frame_idx}/{total_frames})")
+                print(f"  Processed {processed} frames ({frame_idx}/{total_frames})\t{500/(t.time() - time)}FPS")
+                time = t.time()
 
         frame_idx += 1
 
@@ -171,4 +206,5 @@ def main():
 
 
 if __name__ == "__main__":
+    print(HP_DEVICE)
     main()
