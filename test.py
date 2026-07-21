@@ -1,19 +1,18 @@
 from pathlib import Path
 
 import cv2
-import numpy as np
 import torch
-from onnx2torch import convert
 from ultralytics import YOLO
 import time as t
+
+from train_hp import CRNN, preprocess, decode
+
 VIDEO = "videos/Запись экрана 2026-07-07 122233.mp4"
 MODEL = "runs/train/v3/weights/best.pt"
 OUT_DIR = Path("runs/detect/video_test")
 SKIP_FRAMES = 2
 
-HP_MODEL_PATH = "hp_ocr_best.pt"
-HP_ONNX_PATH = "en_mobile_model_fixed2.onnx"
-HP_DICT_PATH = "en_mobile_dict.txt"
+HP_MODEL_PATH = "hp_crnn_best.pt"
 HP_PADDING = 10
 HP_DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
@@ -40,76 +39,32 @@ COLORS = {
 }
 
 
-def load_dict(path):
-    lines = Path(path).read_text().splitlines()
-    chars = []
-    for i, l in enumerate(lines):
-        l = l.strip()
-        if not l:
-            continue
-        if i == 0:
-            continue
-        chars.append(l)
-    return chars, 0
-
-
-def decode(ids, char_list, blank_idx):
-    prev = None
-    result = []
-    for i in ids:
-        if i != prev and i != blank_idx:
-            idx = i - 1
-            if 0 <= idx < len(char_list):
-                result.append(char_list[idx])
-        prev = i
-    return "".join(result)
-
-
-def preprocess_hp(img, target_h=48):
-    h, w = img.shape[:2]
-    scale = target_h / h
-    new_w = max(int(w * scale), target_h)
-    resized = cv2.resize(img, (new_w, target_h), interpolation=cv2.INTER_LINEAR)
-    resized = resized.astype(np.float32) / 255.0
-    resized = (resized - 0.5) / 0.5
-    resized = resized.transpose(2, 0, 1)
-    return resized
-
-
 def load_hp_model():
-    char_list, blank_idx = load_dict(HP_DICT_PATH)
-    model = convert(HP_ONNX_PATH)
-    setattr(model, "Softmax/2", torch.nn.Identity())
+    model = CRNN()
     model.load_state_dict(torch.load(HP_MODEL_PATH, map_location=HP_DEVICE))
     model.to(HP_DEVICE)
     model.eval()
-    return model, char_list, blank_idx
+    return model
 
 
 def preprocess_hp_batch(crops, target_h=48):
     tensors = []
     for crop in crops:
-        h, w = crop.shape[:2]
-        scale = target_h / h
-        new_w = max(int(w * scale), target_h)
-        resized = cv2.resize(crop, (new_w, target_h), interpolation=cv2.INTER_LINEAR)
-        resized = resized.astype(np.float32) / 255.0
-        resized = (resized - 0.5) / 0.5
-        resized = resized.transpose(2, 0, 1)
-        tensors.append(torch.from_numpy(resized))
+        tensor = torch.from_numpy(preprocess(crop, target_h))
+        tensors.append(tensor)
 
     max_w = max(t.shape[2] for t in tensors)
     padded = []
     for t in tensors:
         w = t.shape[2]
         if w < max_w:
-            pad = torch.zeros((3, 48, max_w - w), dtype=torch.float32)
+            pad = torch.zeros((1, 48, max_w - w), dtype=torch.float32)
             t = torch.cat([t, pad], dim=2)
         padded.append(t)
     return torch.stack(padded).to(HP_DEVICE)
 
 
-def predict_hp_batch(model, char_list, blank_idx, crops):
+def predict_hp_batch(model, crops):
     if not crops:
         return []
     batch = preprocess_hp_batch(crops)
@@ -118,14 +73,14 @@ def predict_hp_batch(model, char_list, blank_idx, crops):
     pred_ids = logits.argmax(dim=2).permute(1, 0)
     results = []
     for b in range(len(crops)):
-        hp_text = decode(pred_ids[b].tolist(), char_list, blank_idx)
+        hp_text = decode(pred_ids[b].tolist())
         results.append(hp_text)
     return results
 
 
 def main():
     det_model = YOLO(MODEL)
-    hp_model, char_list, blank_idx = load_hp_model()
+    hp_model = load_hp_model()
 
     cap = cv2.VideoCapture(VIDEO)
     if not cap.isOpened():
@@ -184,7 +139,7 @@ def main():
                             hp_boxes.append((x1, y2))
 
             if hp_crops:
-                hp_texts = predict_hp_batch(hp_model, char_list, blank_idx, hp_crops)
+                hp_texts = predict_hp_batch(hp_model, hp_crops)
                 for (x1, y2), hp_text in zip(hp_boxes, hp_texts):
                     if hp_text:
                         cv2.putText(frame, f"HP: {hp_text}", (x1, y2 + 15),
