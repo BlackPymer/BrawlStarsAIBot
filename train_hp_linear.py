@@ -10,17 +10,16 @@ from tqdm import tqdm
 
 DATASET_ROOT = Path("health_dataset")
 
-BATCH_SIZE = 16
+BATCH_SIZE = 32
 EPOCHS = 200
 LR = 1e-3
 WEIGHT_DECAY = 1e-5
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
-CHARS = "0123456789"
-BLANK_IDX = 0
+HP_NORM = 20000.0
 
 
-class CRNN(nn.Module):
+class HPRegressor(nn.Module):
     def __init__(self):
         super().__init__()
         self.conv1 = nn.Sequential(
@@ -41,43 +40,24 @@ class CRNN(nn.Module):
             nn.ReLU(),
             nn.MaxPool2d(2, 1),
         )
-        self.adaptive_pool = nn.AdaptiveAvgPool2d((1, None))
-        self.lstm = nn.LSTM(128, 128, bidirectional=True, batch_first=True)
-        self.classifier = nn.Sequential(
-            nn.Dropout(0.4),
-            nn.Linear(256, 11),
+        self.pool = nn.AdaptiveAvgPool2d((1, 1))
+        self.regressor = nn.Sequential(
+            nn.Dropout(0.3),
+            nn.Linear(128, 64),
+            nn.ReLU(),
+            nn.Dropout(0.3),
+            nn.Linear(64, 1),
         )
 
     def forward(self, x):
         x = self.conv1(x)
         x = self.conv2(x)
         x = self.conv3(x)
-        x = self.adaptive_pool(x)
-        x = x.squeeze(2)
-        x = x.permute(0, 2, 1)
-        x, _ = self.lstm(x)
-        x = self.classifier(x)
-        return x
+        x = self.pool(x)
+        x = x.flatten(1)
+        x = self.regressor(x)
+        return x.squeeze(1)
 
-
-def encode_hp(hp):
-    return [CHARS.index(c) + 1 for c in str(int(hp))]
-
-
-def decode(ids):
-    prev = None
-    result = []
-    for i in ids:
-        if i != prev and i != BLANK_IDX:
-            idx = i - 1
-            if 0 <= idx < len(CHARS):
-                result.append(CHARS[idx])
-        prev = i
-    return "".join(result)
-
-
-def decode_gt(ids):
-    return "".join(CHARS[i - 1] for i in ids if 0 <= i - 1 < len(CHARS))
 
 def preprocess(img, target_h=48):
     if img.ndim == 3 and img.shape[2] == 3:
@@ -186,7 +166,7 @@ class HPDataset(Dataset):
             img = augment(img).astype(np.uint8)
 
         inp = preprocess(img)
-        target = torch.tensor(encode_hp(hp), dtype=torch.long)
+        target = torch.tensor(hp / HP_NORM, dtype=torch.float32)
         return inp, target
 
 
@@ -201,14 +181,12 @@ def collate_fn(batch):
             im = np.concatenate([im, pad], axis=2)
         padded.append(torch.from_numpy(im))
     images = torch.stack(padded)
-
-    target_lengths = torch.tensor([len(t) for t in targets], dtype=torch.long)
-    targets_concat = torch.cat(targets)
-    return images, targets_concat, target_lengths
+    targets = torch.stack(targets)
+    return images, targets
 
 
 def main():
-    model = CRNN().to(DEVICE)
+    model = HPRegressor().to(DEVICE)
     model.train()
 
     all_samples = HPDataset(DATASET_ROOT).samples
@@ -241,94 +219,76 @@ def main():
         optimizer, mode='min', factor=0.5, patience=10, min_lr=1e-6
     )
 
-    best_acc = 0.0
+    best_mae = float("inf")
     for epoch in range(1, EPOCHS + 1):
         model.train()
         train_loss = 0.0
         pbar = tqdm(train_loader, desc=f"Epoch {epoch}/{EPOCHS}", leave=False)
-        for images, targets, target_lengths in pbar:
+        for images, targets in pbar:
             images = images.to(DEVICE)
             targets = targets.to(DEVICE)
-            target_lengths = target_lengths.to(DEVICE)
 
-            logits = model(images).permute(1, 0, 2)
-            log_probs = torch.log_softmax(logits, dim=-1)
-            T, B, C = log_probs.shape
-            input_lengths = torch.full((B,), T, dtype=torch.long, device=DEVICE)
+            preds = model(images)
+            loss = nn.functional.smooth_l1_loss(preds, targets)
 
-            loss = nn.functional.ctc_loss(
-                log_probs, targets, input_lengths, target_lengths,
-                blank=BLANK_IDX, zero_infinity=True,
-            )
             optimizer.zero_grad()
             loss.backward()
-            torch.nn.utils.clip_grad_norm_(model.parameters(), 5.0)
+            nn.utils.clip_grad_norm_(model.parameters(), 5.0)
             optimizer.step()
             train_loss += loss.item()
             pbar.set_postfix(loss=f"{loss.item():.4f}")
 
         model.eval()
         val_loss = 0.0
-        correct = 0
-        total = 0
+        abs_errors = []
         with torch.no_grad():
-            for images, targets, target_lengths in val_loader:
+            for images, targets in val_loader:
                 images = images.to(DEVICE)
                 targets = targets.to(DEVICE)
-                target_lengths = target_lengths.to(DEVICE)
 
-                logits = model(images).permute(1, 0, 2)
-                log_probs = torch.log_softmax(logits, dim=-1)
-                T, B, C = log_probs.shape
-                input_lengths = torch.full((B,), T, dtype=torch.long, device=DEVICE)
+                preds = model(images)
+                val_loss += nn.functional.smooth_l1_loss(preds, targets).item()
 
-                val_loss += nn.functional.ctc_loss(
-                    log_probs, targets, input_lengths, target_lengths,
-                    blank=BLANK_IDX, zero_infinity=True,
-                ).item()
+                pred_hp = (preds * HP_NORM).cpu().numpy()
+                true_hp = (targets * HP_NORM).cpu().numpy()
+                abs_errors.extend(np.abs(pred_hp - true_hp))
 
-                pred_ids = logits.argmax(dim=2).permute(1, 0)
-                for b in range(B):
-                    start = target_lengths[:b].sum()
-                    end = target_lengths[:b + 1].sum()
-                    pred = decode(pred_ids[b].tolist())
-                    gt = decode_gt(targets[start:end].tolist())
-                    if pred == gt:
-                        correct += 1
-                    total += 1
-
+        avg_train = train_loss / len(train_loader)
         avg_val = val_loss / len(val_loader)
-        acc = correct / total if total > 0 else 0
+        mae = float(np.mean(abs_errors))
+        med_ae = float(np.median(abs_errors))
+        rel_errors = np.array(abs_errors) / (np.array([s[1] for s in val_samples]) + 1)
+        mean_rel = float(np.mean(rel_errors))
+        med_rel = float(np.median(rel_errors))
         scheduler.step(avg_val)
 
         print(
             f"Epoch {epoch:3d} | "
-            f"train_loss: {train_loss/len(train_loader):.4f} | "
-            f"val_loss: {avg_val:.4f} | "
-            f"acc: {acc:.4f}"
+            f"train: {avg_train:.4f} | "
+            f"val: {avg_val:.4f} | "
+            f"MAE: {mae:.0f} | "
+            f"MedAE: {med_ae:.0f} | "
+            f"Rel: {mean_rel:.3f}/{med_rel:.3f}"
         )
 
-        if acc > best_acc:
-            best_acc = acc
-            torch.save(model.state_dict(), "hp_crnn_best.pt")
-            print(f"  -> saved hp_crnn_best.pt (acc={acc:.4f})")
+        if mae < best_mae:
+            best_mae = mae
+            torch.save(model.state_dict(), "hp_linear_best.pt")
+            print(f"  -> saved hp_linear_best.pt (MAE={mae:.0f})")
 
-    print(f"\nBest accuracy: {best_acc:.4f}")
+    print(f"\nBest MAE: {best_mae:.0f}")
 
-    model.load_state_dict(torch.load("hp_crnn_best.pt"))
+    model.load_state_dict(torch.load("hp_linear_best.pt"))
     model.eval()
     with torch.no_grad():
-        images, targets, target_lengths = next(iter(val_loader))
+        images, targets = next(iter(val_loader))
         images = images.to(DEVICE)
-        logits = model(images).permute(1, 0, 2)
-        pred_ids = logits.argmax(dim=2).permute(1, 0)
+        preds = model(images)
+        pred_hp = (preds * HP_NORM).cpu().numpy()
+        true_hp = (targets * HP_NORM).cpu().numpy()
         print("\nSample predictions:")
-        for b in range(min(16, len(target_lengths))):
-            start = target_lengths[:b].sum()
-            end = target_lengths[:b + 1].sum()
-            pred = decode(pred_ids[b].tolist())
-            gt = decode_gt(targets[start:end].tolist())
-            print(f"  gt: {gt:>6s}  pred: {pred:>6s}")
+        for b in range(min(16, len(pred_hp))):
+            print(f"  gt: {true_hp[b]:>7.0f}  pred: {pred_hp[b]:>7.0f}  diff: {pred_hp[b] - true_hp[b]:>+7.0f}")
 
 
 if __name__ == "__main__":
