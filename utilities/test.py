@@ -5,7 +5,7 @@ import torch
 from ultralytics import YOLO
 import time as t
 
-from train_hp import CRNN, preprocess, decode
+from utilities.train_hp import CRNN, preprocess, decode
 
 VIDEO = "videos/Запись экрана 2026-07-07 122233.mp4"
 MODEL = "runs/train/v3/weights/best.pt"
