@@ -1,7 +1,11 @@
 from controller.game_controller import GameController
 from hp_recognition.hp_recogniser import HPRecogniser, HP_PADDING
+from network.network_engine import NetworkEngine
 from objects_detection.object_detector import ObjectDetector, CLASS_NAMES
-from utilities.test import predict_hp_batch
+import time as t
+
+BULLET_RELOADING_TIME = 1.5
+MAX_BULLETS = 3
 
 
 class GameEngine:
@@ -10,17 +14,25 @@ class GameEngine:
         self.game_controller = None
         self.hp_recogniser = HPRecogniser()
         self.object_detector = ObjectDetector()
+        self.bullets_number = 0
+        self.last_bullet_reloaded_time = 0
+        self.network = NetworkEngine()
 
     def start_game(self, controller: GameController):
         self.game_controller = controller
         self.is_game = True
         self.game_controller.start_game()
+        self.bullets_number = MAX_BULLETS
 
     def stop_game(self):
         self.game_controller.stop_game()
         self.is_game = False
 
     def update(self):
+        if self.bullets_number < MAX_BULLETS and t.time() - self.last_bullet_reloaded_time > BULLET_RELOADING_TIME:
+            self.last_bullet_reloaded_time = t.time()
+            self.bullets_number += 1
+
         frame = self.game_controller.get_frame()
         objects = self.object_detector.detect(frame)
 
@@ -38,5 +50,7 @@ class GameEngine:
                     crop = frame[cy1:cy2, cx1:cx2]
                     if crop.size > 0:
                         hp_crops.append(crop)
-        hp_values = predict_hp_batch(self.hp_recogniser, hp_crops) if hp_crops else None
-        # TODO: create input data for network and pass through it
+        hp_texts = self.hp_recogniser.recognise(image=frame, crops=hp_crops) if hp_crops else None
+        hp_values = [int(i) for i in hp_texts]
+        self.network.make_action(objects, hp_values)
+
