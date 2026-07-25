@@ -41,7 +41,7 @@ class GameEngine:
             for box in obj.boxes:
                 cls_id = int(box.cls[0])
                 x1, y1, x2, y2 = map(int, box.xyxy[0].tolist())
-                if cls_id in (0, 1):
+                if CLASS_NAMES[cls_id] in ("player", "enemy"):
                     h, w = frame.shape[:2]
                     cx1 = max(0, x1 - HP_PADDING)
                     cy1 = max(0, y1 - HP_PADDING)
@@ -52,5 +52,32 @@ class GameEngine:
                         hp_crops.append(crop)
         hp_texts = self.hp_recogniser.recognise(image=frame, crops=hp_crops) if hp_crops else None
         hp_values = [int(i) for i in hp_texts]
-        self.network.make_action(objects, hp_values)
+        self.network.make_action(objects, hp_values, ult=False, )
 
+        def update(self):
+
+            if self.bullets_number < MAX_BULLETS and t.time() - self.last_bullet_reloaded_time > BULLET_RELOADING_TIME:
+                self.last_bullet_reloaded_time = t.time()
+                self.bullets_number += 1
+
+        frame = self.game_controller.get_frame()
+        objects = self.object_detector.detect(frame)
+
+        hp_crops = []
+        for obj in objects:
+            for box in obj.boxes:
+                cls_id = int(box.cls[0])
+                x1, y1, x2, y2 = map(int, box.xyxy[0].tolist())
+                if CLASS_NAMES[cls_id] in ("player", "enemy"):
+                    h, w = frame.shape[:2]
+                    cx1 = max(0, x1 - HP_PADDING)
+                    cy1 = max(0, y1 - HP_PADDING)
+                    cx2 = min(w, x2 + HP_PADDING)
+                    cy2 = min(h, y1 + 100)
+                    crop = frame[cy1:cy2, cx1:cx2]
+                    if crop.size > 0:
+                        hp_crops.append(crop)
+        hp_texts = self.hp_recogniser.recognise(image=frame, crops=hp_crops) if hp_crops else None
+        hp_values = [int(i) for i in hp_texts]
+        # TODO: change 1920x1080 into real resolution
+        self.network.make_action(objects, hp_values, ult=False, frame_width=1920, frame_height=1080)
