@@ -1,5 +1,6 @@
 from controller.game_controller import GameController
 from hp_recognition.hp_recogniser import HPRecogniser, HP_PADDING
+from network.exceptions import PlayerNotFoundException
 from network.network_engine import NetworkEngine
 from objects_detection.object_detector import ObjectDetector, CLASS_NAMES
 import time as t
@@ -80,4 +81,7 @@ class GameEngine:
         hp_texts = self.hp_recogniser.recognise(image=frame, crops=hp_crops) if hp_crops else None
         hp_values = [int(i) for i in hp_texts]
         # TODO: change 1920x1080 into real resolution
-        self.network.make_action(objects, hp_values, ult=False, frame_width=1920, frame_height=1080)
+        try:
+            self.network.make_action(objects, hp_values, ult=False, frame_width=1920, frame_height=1080)
+        except PlayerNotFoundException:
+            print("Player not found in current frame")
