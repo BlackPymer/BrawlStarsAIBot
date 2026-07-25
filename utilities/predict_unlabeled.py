@@ -5,7 +5,7 @@ import numpy as np
 import torch
 from tqdm import tqdm
 
-from train_hp import CRNN, HPDataset, preprocess, decode, DEVICE
+from utilities.train_hp import CRNN, HPDataset, preprocess, decode, DEVICE
 
 DATASET_ROOT = Path("health_dataset")
 MODEL_PATH = "hp_crnn_best.pt"

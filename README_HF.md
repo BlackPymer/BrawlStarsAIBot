@@ -52,7 +52,7 @@ import torch
 from train_hp import CRNN, preprocess, decode
 
 model = CRNN()
-model.load_state_dict(torch.load("hp_crnn_best.pt", map_location="cpu"))
+model.load_state_dict(torch.load("src/hp_recognition/hp_crnn_best.pt", map_location="cpu"))
 model.eval()
 
 # Load a cropped HP region
