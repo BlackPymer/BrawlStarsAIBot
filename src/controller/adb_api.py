@@ -1,43 +1,31 @@
 import subprocess
-import time
-from functools import partial
-
-_ADB_SHELL = None
 
 
-def _get_shell():
-    global _ADB_SHELL
-    if _ADB_SHELL is None:
-        _ADB_SHELL = subprocess.Popen(
+class ADBShell:
+    def __init__(self):
+        self._process = subprocess.Popen(
             ["adb", "shell"],
             stdin=subprocess.PIPE,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             text=True,
         )
-    return _ADB_SHELL
 
+    def close(self):
+        if self._process is not None:
+            self._process.terminate()
+            self._process = None
 
-def _close_shell():
-    global _ADB_SHELL
-    if _ADB_SHELL is not None:
-        _ADB_SHELL.terminate()
-        _ADB_SHELL = None
+    def _cmd(self, command: str):
+        self._process.stdin.write(command + "\n")
+        self._process.stdin.flush()
 
+    def tap(self, x: int, y: int):
+        self._cmd(f"input tap {x} {y}")
 
-def _cmd(command: str):
-    shell = _get_shell()
-    shell.stdin.write(command + "\n")
-    shell.stdin.flush()
+    def swipe(self, x1: int, y1: int, x2: int, y2: int, duration_ms: int = 50):
+        self._cmd(f"input swipe {x1} {y1} {x2} {y2} {duration_ms}")
 
-
-def make_tap(x: int, y: int):
-    _cmd(f"input tap {x} {y}")
-
-
-def make_swipe(x1: int, y1: int, x2: int, y2: int, duration_ms: int = 50):
-    _cmd(f"input swipe {x1} {y1} {x2} {y2} {duration_ms}")
-
-
-def screencap(path: str = "frame.png"):
-    subprocess.run(["adb", "exec-out", "screencap", "-p"], check=True)
+    @staticmethod
+    def screencap(path: str = "frame.png"):
+        subprocess.run(["adb", "exec-out", "screencap", "-p"], check=True)
