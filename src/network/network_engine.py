@@ -37,4 +37,8 @@ class NetworkEngine:
                     map_inp[0, cls_id, ny1:ny2, nx1:nx2] = 1
         if isinstance(player_hp_inp, int):
             raise PlayerNotFoundException
-        return self.player(map_inp, player_hp_inp, ult_inp)
+        move_res, shoot_res, ult_res = self.player(map_inp, player_hp_inp, ult_inp)
+        move_res = move_res.to_list()
+        shoot_res = torch.multinomial(shoot_res, num_samples=1).item()
+        ult_res = torch.multinomial(ult_res, 1)
+        return move_res.tolist(), shoot_res, True if ult_res[0] > 0 else False

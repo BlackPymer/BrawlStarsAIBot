@@ -54,7 +54,13 @@ class GameEngine:
         hp_texts = self.hp_recogniser.recognise(image=frame, crops=hp_crops) if hp_crops else None
         hp_values = [int(i) for i in hp_texts]
         # TODO: change 1920x1080 into real resolution
+        move_action = shoot_action = ult_action = None
         try:
-            self.network.make_action(objects, hp_values, ult=False, frame_width=1920, frame_height=1080)
+            move_action, shoot_action, ult_action = self.network.make_action(objects, hp_values, ult=False,
+                                                                             frame_width=1920, frame_height=1080)
         except PlayerNotFoundException:
             print("Player not found in current frame")
+            return
+
+        if move_action and shoot_action and ult_action:
+            self.game_controller.make_action(move_action, shoot_action,ult_action)

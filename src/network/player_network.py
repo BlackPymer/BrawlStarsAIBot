@@ -46,7 +46,7 @@ class PlayerNetwork(nn.Module):
             nn.Sigmoid(),
         )
 
-    def forward(self, map_inp: Tensor, hp: Tensor, has_ult: Tensor):
+    def forward(self, map_inp: Tensor, hp: Tensor, has_ult: Tensor) -> tuple[Tensor, Tensor, Tensor]:
         map_logits = self.map_layer(map_inp)
         combined = torch.cat([map_logits, hp, has_ult], 1)
         fc1_out = self.fc1(combined)
