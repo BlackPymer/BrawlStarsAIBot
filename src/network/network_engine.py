@@ -2,7 +2,7 @@ import torch
 
 from network.exceptions import PlayerNotFoundException
 from objects_detection.object_detector import CLASS_NAMES
-from player_network import PlayerNetwork, INPUT_HEIGHT, INPUT_WIDTH
+from network.player_network import PlayerNetwork, INPUT_HEIGHT, INPUT_WIDTH
 
 MAX_HP_VALUE = 20000
 
@@ -38,7 +38,6 @@ class NetworkEngine:
         if isinstance(player_hp_inp, int):
             raise PlayerNotFoundException
         move_res, shoot_res, ult_res = self.player(map_inp, player_hp_inp, ult_inp)
-        move_res = move_res.to_list()
         shoot_res = torch.multinomial(shoot_res, num_samples=1).item()
-        ult_res = torch.multinomial(ult_res, 1)
-        return move_res.tolist(), shoot_res, True if ult_res[0] > 0 else False
+        ult_res = torch.bernoulli(ult_res).item()
+        return move_res.tolist(), shoot_res, bool(ult_res)

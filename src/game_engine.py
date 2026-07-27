@@ -1,8 +1,10 @@
 from controller.game_controller import GameController
-from hp_recognition.hp_recogniser import HPRecogniser, HP_PADDING
+from hp_recognition.hp_recogniser import HP_PADDING
+from hp_recognition.CRNN_hp_recogniser import CRNNHpRecogniser
 from network.exceptions import PlayerNotFoundException
 from network.network_engine import NetworkEngine
-from objects_detection.object_detector import ObjectDetector, CLASS_NAMES
+from objects_detection.object_detector import CLASS_NAMES
+from objects_detection.yolo_object_detector import YoloObjectDetector
 import time as t
 
 BULLET_RELOADING_TIME = 1.5
@@ -13,8 +15,8 @@ class GameEngine:
     def __init__(self):
         self.is_game = False
         self.game_controller = None
-        self.hp_recogniser = HPRecogniser()
-        self.object_detector = ObjectDetector()
+        self.hp_recogniser = CRNNHpRecogniser()
+        self.object_detector = YoloObjectDetector()
         self.bullets_number = 0
         self.last_bullet_reloaded_time = 0
         self.network = NetworkEngine()
@@ -26,7 +28,7 @@ class GameEngine:
         self.bullets_number = MAX_BULLETS
 
     def stop_game(self):
-        self.game_controller.stop_game()
+        self.game_controller.exit_game()
         self.is_game = False
 
     def update(self):
@@ -51,8 +53,8 @@ class GameEngine:
                     crop = frame[cy1:cy2, cx1:cx2]
                     if crop.size > 0:
                         hp_crops.append(crop)
-        hp_texts = self.hp_recogniser.recognise(image=frame, crops=hp_crops) if hp_crops else None
-        hp_values = [int(i) for i in hp_texts]
+        hp_texts = self.hp_recogniser.recognise(image=frame, crops=hp_crops) if hp_crops else []
+        hp_values = [int(i) for i in hp_texts] if hp_texts else []
         # TODO: change 1920x1080 into real resolution
         move_action = shoot_action = ult_action = None
         try:
@@ -62,5 +64,5 @@ class GameEngine:
             print("Player not found in current frame")
             return
 
-        if move_action and shoot_action and ult_action:
+        if move_action is not None and shoot_action is not None and ult_action is not None:
             self.game_controller.make_action(move_action, shoot_action,ult_action)

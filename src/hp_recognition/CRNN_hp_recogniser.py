@@ -4,7 +4,8 @@ import random
 import torch.nn as nn
 import numpy as np
 
-HP_MODEL_PATH = "hp_crnn_best.pt"
+import os as _os
+HP_MODEL_PATH = _os.path.join(_os.path.dirname(__file__), "hp_crnn_best.pt")
 HP_DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 BLANK_IDX = 0
 CHARS = "0123456789"

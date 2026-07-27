@@ -1,4 +1,6 @@
 from controller.adb_api import ADBShell
+from controller.config import load_config
+from controller.screen_capture import ScreenCapture
 
 
 def to_screen(borders: list[int], changes: list[int]) -> list[int]:
@@ -8,13 +10,32 @@ def to_screen(borders: list[int], changes: list[int]) -> list[int]:
 
 class GameController:
     def __init__(self):
-        self.shoot_center = None
         self.adb = ADBShell()
-        self.move_border = [0, 0, 0, 0]  # x1, y1, x2 ,y2
-        self.shoot_border = [0, 0, 0, 0]  # x1, y1, x2 ,y2
-        self.ult_center = [0, 0]
-        self.last_move = [0, 0]  # in screen axes
+        self.last_move = None
         self.axes = []
+        self.shoot_center = None
+        self.move_border = [0, 0, 0, 0]
+        self.shoot_border = [0, 0, 0, 0]
+        self.ult_center = [0, 0]
+        self._cap = ScreenCapture()
+        self._load_config()
+
+    def _load_config(self):
+        cfg = load_config()
+        if cfg["move_border"] != [0, 0, 0, 0]:
+            self.set_move_border(cfg["move_border"])
+        if cfg["shoot_border"] != [0, 0, 0, 0]:
+            self.set_shoot_border(cfg["shoot_border"])
+        if cfg["ult_center"] != [0, 0]:
+            self.ult_center = cfg["ult_center"]
+
+    def setup_interactive(self):
+        from controller.border_setup import setup_borders
+        cfg = setup_borders()
+        if cfg:
+            self.set_move_border(cfg["move_border"])
+            self.set_shoot_border(cfg["shoot_border"])
+            self.ult_center = cfg["ult_center"]
 
     def start_game(self):
         pass
@@ -23,7 +44,7 @@ class GameController:
         pass
 
     def get_frame(self):
-        pass
+        return self._cap.get_frame()
 
     def set_move_border(self, borders: list[int]):
         self.move_border = borders
@@ -36,7 +57,7 @@ class GameController:
             (borders[2], borders[1]),
             (borders[2], (borders[1] + borders[3]) // 2),
             (borders[2], borders[3]),
-            ((borders[0] + borders[2]) // 2, borders[2]),
+            ((borders[0] + borders[2]) // 2, borders[3]),
             (borders[0], borders[3]),
             (borders[0], (borders[1] + borders[3]) // 2),
         ]
@@ -44,7 +65,10 @@ class GameController:
 
     def make_action(self, move, shoot: int, ult: bool):
         cur_move = to_screen(self.move_border, move)
-        self.adb.swipe(self.last_move[0], self.last_move[1], cur_move[0], cur_move[1])
+        if self.last_move is not None:
+            self.adb.swipe(self.last_move[0], self.last_move[1], cur_move[0], cur_move[1])
+        else:
+            self.adb.swipe(cur_move[0], cur_move[1], cur_move[0], cur_move[1])
         self.last_move = cur_move
 
         if shoot < 8:

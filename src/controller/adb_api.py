@@ -3,13 +3,17 @@ import subprocess
 
 class ADBShell:
     def __init__(self):
-        self._process = subprocess.Popen(
-            ["adb", "shell"],
-            stdin=subprocess.PIPE,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            text=True,
-        )
+        try:
+            self._process = subprocess.Popen(
+                ["adb", "shell"],
+                stdin=subprocess.PIPE,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+            )
+        except FileNotFoundError:
+            print("WARNING: adb not found. Actions will be no-ops.")
+            self._process = None
 
     def close(self):
         if self._process is not None:
@@ -17,6 +21,8 @@ class ADBShell:
             self._process = None
 
     def _cmd(self, command: str):
+        if self._process is None:
+            return
         self._process.stdin.write(command + "\n")
         self._process.stdin.flush()
 
@@ -28,4 +34,10 @@ class ADBShell:
 
     @staticmethod
     def screencap(path: str = "frame.png"):
-        subprocess.run(["adb", "exec-out", "screencap", "-p"], check=True)
+        try:
+            result = subprocess.run(["adb", "exec-out", "screencap", "-p"], capture_output=True, check=True)
+            if result.stdout:
+                with open(path, "wb") as f:
+                    f.write(result.stdout)
+        except FileNotFoundError:
+            print("WARNING: adb not found. Cannot screencap.")

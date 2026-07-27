@@ -21,7 +21,7 @@ class PlayerNetwork(nn.Module):
             nn.Flatten(),  # 2240
         )
         self.fc1 = nn.Sequential(
-            nn.Linear(INPUT_WIDTH * INPUT_HEIGHT * 32, 512),  # map_layer output + hp + ult possibility
+            nn.Linear(2242, 512),
             nn.ReLU(),
             nn.Linear(512, 256),
             nn.ReLU(),
@@ -43,7 +43,6 @@ class PlayerNetwork(nn.Module):
             nn.Linear(256, 128),
             nn.ReLU(),
             nn.Linear(128, 1),
-            nn.Sigmoid(),
         )
 
     def forward(self, map_inp: Tensor, hp: Tensor, has_ult: Tensor) -> tuple[Tensor, Tensor, Tensor]:

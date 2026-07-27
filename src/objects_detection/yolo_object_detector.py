@@ -1,7 +1,8 @@
 from objects_detection.object_detector import *
 from ultralytics import YOLO
 
-MODEL = "best.pt"
+import os as _os
+MODEL = _os.path.join(_os.path.dirname(__file__), "best.pt")
 
 
 class YoloObjectDetector(ObjectDetector):
