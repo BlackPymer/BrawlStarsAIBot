@@ -26,6 +26,7 @@ class GameEngine:
         self.is_game = True
         self.game_controller.start_game()
         self.bullets_number = MAX_BULLETS
+        print("[BOT] Game started!")
 
     def stop_game(self):
         self.game_controller.exit_game()
@@ -37,6 +38,8 @@ class GameEngine:
             self.bullets_number += 1
 
         frame = self.game_controller.get_frame()
+        if frame is None:
+            return
         objects = self.object_detector.detect(frame)
 
         hp_crops = []
@@ -66,3 +69,4 @@ class GameEngine:
 
         if move_action is not None and shoot_action is not None and ult_action is not None:
             self.game_controller.make_action(move_action, shoot_action,ult_action)
+            print(f"[BOT] move={move_action} shoot={shoot_action} ult={ult_action} objs={len(objects)} hp={hp_values}")

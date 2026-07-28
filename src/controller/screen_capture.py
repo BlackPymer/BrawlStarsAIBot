@@ -41,7 +41,9 @@ class ScreenCapture:
 
     def get_frame(self) -> np.ndarray | None:
         if self._system == "Windows":
-            return self._capture_screen()
+            frame = self._capture_screen()
+            if frame is not None:
+                return frame
         return self._capture_test()
 
     def _capture_screen(self) -> np.ndarray | None:

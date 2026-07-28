@@ -12,7 +12,9 @@ if __name__ == '__main__':
     cfg = load_config()
     if cfg["move_border"] == [0, 0, 0, 0]:
         print("Borders not configured. Starting interactive setup...")
-        controller.setup_interactive()
+        if not controller.setup_interactive():
+            print("Setup failed. Exiting.")
+            sys.exit(1)
     else:
         print("Config loaded:", cfg)
 

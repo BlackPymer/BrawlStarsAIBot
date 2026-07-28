@@ -1,6 +1,11 @@
+import time
+
 from controller.adb_api import ADBShell
 from controller.config import load_config
 from controller.screen_capture import ScreenCapture
+
+TAP_OFFSET = 20
+MATCH_LOAD_WAIT = 13
 
 
 def to_screen(borders: list[int], changes: list[int]) -> list[int]:
@@ -18,6 +23,8 @@ class GameController:
         self.shoot_border = [0, 0, 0, 0]
         self.ult_center = [0, 0]
         self._cap = ScreenCapture()
+        self._move_held = False
+        self._move_pos = None
         self._load_config()
 
     def _load_config(self):
@@ -36,12 +43,21 @@ class GameController:
             self.set_move_border(cfg["move_border"])
             self.set_shoot_border(cfg["shoot_border"])
             self.ult_center = cfg["ult_center"]
+            return True
+        return False
 
     def start_game(self):
-        pass
+        w = self.adb._screen_w or 1600
+        h = self.adb._screen_h or 900
+        self.adb.tap(w - TAP_OFFSET, h - TAP_OFFSET)
+        time.sleep(MATCH_LOAD_WAIT)
+        self.adb._chain_touches()
 
     def exit_game(self):
-        pass
+        if self._move_held:
+            self.adb._chain_touches()
+            self._move_held = False
+            self._move_pos = None
 
     def get_frame(self):
         return self._cap.get_frame()
@@ -65,16 +81,31 @@ class GameController:
 
     def make_action(self, move, shoot: int, ult: bool):
         cur_move = to_screen(self.move_border, move)
-        if self.last_move is not None:
-            self.adb.swipe(self.last_move[0], self.last_move[1], cur_move[0], cur_move[1])
-        else:
-            self.adb.swipe(cur_move[0], cur_move[1], cur_move[0], cur_move[1])
-        self.last_move = cur_move
+        if not self._move_held:
+            self.adb._chain_touches(tuple(cur_move))
+            self._move_held = True
+            self._move_pos = cur_move
+        elif cur_move != self._move_pos:
+            self.adb._chain_touches(tuple(cur_move))
+            self._move_pos = cur_move
 
         if shoot < 8:
-            self.adb.swipe(*self.shoot_center, *self.axes[shoot])
+            self.adb._cmd(" && ".join([
+                *self.adb._to_chain(tuple(cur_move), tuple(self.shoot_center)),
+                *self.adb._to_chain(tuple(cur_move), tuple(self.axes[shoot])),
+                *self.adb._to_chain(tuple(cur_move)),
+            ]))
         elif shoot == 8:
-            self.adb.tap(*self.shoot_center)
+            self.adb._cmd(" && ".join([
+                *self.adb._to_chain(tuple(cur_move), tuple(self.shoot_center)),
+                *self.adb._to_chain(tuple(cur_move)),
+            ]))
 
         if ult:
-            self.adb.tap(self.ult_center[0], self.ult_center[1])
+            self.adb._cmd(" && ".join([
+                *self.adb._to_chain(tuple(cur_move), tuple(self.ult_center)),
+                "sleep 0.015",
+                *self.adb._to_chain(tuple(cur_move)),
+            ]))
+
+        self.last_move = cur_move

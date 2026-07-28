@@ -38,6 +38,6 @@ class NetworkEngine:
         if isinstance(player_hp_inp, int):
             raise PlayerNotFoundException
         move_res, shoot_res, ult_res = self.player(map_inp, player_hp_inp, ult_inp)
-        shoot_res = torch.multinomial(shoot_res, num_samples=1).item()
+        shoot_res = torch.multinomial(shoot_res.exp(), num_samples=1).item()
         ult_res = torch.bernoulli(ult_res).item()
-        return move_res.tolist(), shoot_res, bool(ult_res)
+        return move_res[0].tolist(), shoot_res, bool(ult_res)
