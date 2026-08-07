@@ -75,11 +75,21 @@ class KeyboardController(BaseController):
         self._cap = ScreenCapture()
         self._config = config or load_config()
         self._held_keys = []
+        self._shot_keys = []
 
-    def _release_all(self):
+    def _release_move(self):
         for k in self._held_keys:
             keyboard.release(k)
         self._held_keys = []
+
+    def _release_shot(self):
+        for k in self._shot_keys:
+            keyboard.release(k)
+        self._shot_keys = []
+
+    def _release_all(self):
+        self._release_move()
+        self._release_shot()
 
     def _press_hold(self, keys):
         for k in keys:
@@ -88,12 +98,12 @@ class KeyboardController(BaseController):
                 self._held_keys.append(k)
 
     def _quick_press(self, keys):
-        self._release_all()
+        self._release_shot()
         for k in keys:
             keyboard.press(k)
+            self._shot_keys.append(k)
         time.sleep(SHOOT_HOLD_SECONDS)
-        for k in keys:
-            keyboard.release(k)
+        self._release_shot()
 
     def start_game(self):
         battle = self._config.get("battle_click", [0, 0])
@@ -130,10 +140,10 @@ class KeyboardController(BaseController):
         if 0 <= move <= 7:
             target = MOVE_KEYS[move]
             if self._held_keys != list(target):
-                self._release_all()
+                self._release_move()
                 self._press_hold(target)
         else:
-            self._release_all()
+            self._release_move()
 
         if shoot <= 7:
             self._quick_press(SHOOT_KEYS[shoot])

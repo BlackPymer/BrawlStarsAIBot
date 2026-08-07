@@ -5,7 +5,7 @@ from network.exceptions import PlayerNotFoundException
 from network.network_engine import NetworkEngine
 from objects_detection.object_detector import CLASS_NAMES
 from objects_detection.yolo_object_detector import YoloObjectDetector
-from ult_recognition.ult_classifier import UltClassifierRecogniser
+from ult_recognition.ult_classifier import UltClassifierRecogniser, extract_player_crop
 import time as t
 
 SHOT_COOLDOWN = 0.3
@@ -68,7 +68,8 @@ class GameEngine:
         # TODO: change 1920x1080 into real resolution
         move_action = shoot_action = ult_action = None
         try:
-            has_ult = self.ult_recogniser.recognise(frame)
+            player_crop = extract_player_crop(frame, objects)
+            has_ult = self.ult_recogniser.recognise(player_crop)
             move_action, shoot_action, ult_action = self.network.make_action(objects, hp_values, ult=has_ult,
                                                                              frame_width=1920, frame_height=1080)
         except PlayerNotFoundException:

@@ -9,6 +9,7 @@ from ult_recognition.ult_recogniser import UltRecogniser
 ULT_MODEL_PATH = _os.path.join(_os.path.dirname(__file__), "ult_model.pth")
 ULT_DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 INPUT_SIZE = 64
+ULT_PADDING = 10
 
 
 class UltClassifier(nn.Module):
@@ -50,6 +51,26 @@ def preprocess(image):
     tensor = (tensor - 0.5) / 0.5
     tensor = tensor.unsqueeze(0).to(ULT_DEVICE)
     return tensor
+
+
+def extract_player_crop(frame, objects, padding=ULT_PADDING):
+    if frame is None:
+        return None
+    h, w = frame.shape[:2]
+    from objects_detection.object_detector import CLASS_NAMES
+    for obj in objects:
+        for box in obj.boxes:
+            cls_id = int(box.cls[0])
+            if CLASS_NAMES[cls_id] != "player":
+                continue
+            x1, y1, x2, y2 = map(int, box.xyxy[0].tolist())
+            cx1 = max(0, x1 - padding)
+            cy1 = max(0, y1 - padding)
+            cx2 = min(w, x2 + padding)
+            cy2 = min(h, y2 + padding)
+            crop = frame[cy1:cy2, cx1:cx2]
+            return crop if crop.size > 0 else None
+    return None
 
 
 class UltClassifierRecogniser(UltRecogniser):
