@@ -2,6 +2,9 @@ import math
 import time
 
 import keyboard
+import pyautogui
+
+pyautogui.FAILSAFE = False
 
 from controller.base_controller import BaseController
 from controller.config import load_config
@@ -118,14 +121,11 @@ class KeyboardController(BaseController):
                 if keyboard.is_pressed("enter"):
                     break
                 time.sleep(0.05)
-            import pyautogui
             battle = list(pyautogui.position())
-            self._config["battle_click"] = battle
             from controller.config import save_config
             save_config(self._config)
             print(f"[BOT] Battle button saved: {battle}")
         else:
-            import pyautogui
             pyautogui.click(battle[0], battle[1])
         time.sleep(MATCH_LOAD_WAIT)
 

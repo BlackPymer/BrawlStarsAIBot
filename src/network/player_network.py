@@ -45,9 +45,7 @@ class PlayerNetwork(nn.Module):
         )
 
     def forward(self, map_inp: Tensor, hp: Tensor, has_ult: Tensor) -> tuple[Tensor, Tensor, Tensor]:
-        map_logits = self.map_layer(map_inp)
-        combined = torch.cat([map_logits, hp, has_ult], 1)
-        fc1_out = self.fc1(combined)
+        fc1_out = self.encode_state(map_inp, hp, has_ult)
         move = self.move_head(fc1_out)
         move = F.log_softmax(move, dim=1)
         shoot_logits = self.shoot_head(fc1_out)
@@ -61,3 +59,8 @@ class PlayerNetwork(nn.Module):
             ult_prob = torch.zeros(fc1_out.size(0), 1, device=fc1_out.device)
 
         return move, shoot, ult_prob
+
+    def encode_state(self, map_inp: Tensor, hp: Tensor, has_ult: Tensor) -> Tensor:
+        map_logits = self.map_layer(map_inp)
+        combined = torch.cat([map_logits, hp, has_ult], 1)
+        return self.fc1(combined)

@@ -29,6 +29,13 @@ def make_controller(cfg):
 
 if __name__ == '__main__':
     cfg = load_config()
+    mode = cfg.get("mode", "game")
+
+    if mode == "rl":
+        from utilities.train_rl import main as rl_main
+        rl_main()
+        sys.exit(0)
+
     controller = make_controller(cfg)
 
     game = GameEngine()
