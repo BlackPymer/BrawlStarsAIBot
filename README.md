@@ -14,7 +14,29 @@ limitations under the License.
 
 ## Overview
 
-This project builds a neural-network-driven **Player Network** — an autonomous agent that perceives, decides, and acts within **Brawl Stars** in real time. The agent's "brain" (`PlayerNetwork`) is a single PyTorch module that fuses spatial awareness (convnet over the minimap/game frame), scalar state (HP), and binary flags (ultimate readiness) to produce continuous movement, discrete shoot direction, and ultimate activation. The perception pipeline supplies live object detections and HP readings; the platform layer (stub) closes the loop.
+This project builds a neural-network-driven **Player Network** — an autonomous agent that perceives, decides, and acts within **Brawl Stars** in real time. The agent's "brain" (`PlayerNetwork`) is a single PyTorch module that fuses spatial awareness (convnet over the minimap/game frame), scalar state (HP), and binary flags (ultimate readiness) to produce continuous movement, discrete shoot direction, and ultimate activation.
+
+## ⚠️ IMPORTANT — CUDA and PyTorch
+
+`requirements.txt` intentionally stays **cross-platform**: it does not pin a CUDA build of PyTorch, because the correct package (CPU vs CUDA wheel) depends on your OS, driver and GPU.
+
+- **With an NVIDIA GPU (recommended):** install the CUDA build from the official PyTorch index, which **overrides** the plain `torch` from `requirements.txt`:
+
+  ```bash
+  pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu124
+  ```
+
+  Verify it took effect:
+
+  ```bash
+  python -c "import torch; print(torch.cuda.is_available())"   # must be True
+  ```
+
+  With CUDA active, the bot runs YOLO detection, HP OCR (CRNN) and ult classification **all on the GPU automatically** (the code uses `cuda if torch.cuda.is_available()`). On an RTX 4050 laptop, YOLO drops from ~106 ms to ~21 ms and HP OCR from ~12 ms to ~1.3 ms per frame vs CPU.
+
+- **CPU-only / no NVIDIA GPU:** just `pip install -r requirements.txt` (CPU wheels of torch are pulled automatically).
+
+> **IMPORTANT:** Do **not** use `onnxruntime-gpu` on Windows for these models — current GPU builds require CUDA 13 / cuDNN 9 and a newer driver than most setups have (driver-only CUDA 12.x is not enough). The code instead switches automatically: **CUDA available → torch (`.pt`), no CUDA → ONNX Runtime CPU fallback** (see `utilities/export_onnx.py` to build the `.onnx` models). The perception pipeline supplies live object detections and HP readings; the platform layer (stub) closes the loop.
 
 ## Architecture
 

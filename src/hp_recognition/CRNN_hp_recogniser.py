@@ -6,6 +6,7 @@ import numpy as np
 
 import os as _os
 HP_MODEL_PATH = _os.path.join(_os.path.dirname(__file__), "hp_crnn_best.pt")
+HP_ONNX_PATH = _os.path.join(_os.path.dirname(__file__), "hp_crnn_best.onnx")
 HP_DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 BLANK_IDX = 0
 CHARS = "0123456789"
@@ -171,14 +172,25 @@ def preprocess_hp_batch(crops, target_h=48):
 class CRNNHpRecogniser(HPRecogniser):
     def __init__(self):
         super().__init__()
-        self.model = load_hp_model()
+        self.session = None
+        if not torch.cuda.is_available() and _os.path.isfile(HP_ONNX_PATH):
+            import onnxruntime as ort
+            self.session = ort.InferenceSession(HP_ONNX_PATH, providers=["CPUExecutionProvider"])
+            self.model = None
+        else:
+            self.model = load_hp_model()
 
     def recognise(self, image, crops) -> list:
         if not crops:
             return []
         batch = preprocess_hp_batch(crops)
-        with torch.no_grad():
-            logits = self.model(batch).permute(1, 0, 2)
+        if self.session is not None:
+            inp = batch.cpu().numpy().astype("float32")
+            logits_np = self.session.run(None, {"input": inp})[0]
+            logits = torch.from_numpy(logits_np).permute(1, 0, 2)
+        else:
+            with torch.no_grad():
+                logits = self.model(batch).permute(1, 0, 2)
         pred_ids = logits.argmax(dim=2).permute(1, 0)
         results = []
         for b in range(len(crops)):

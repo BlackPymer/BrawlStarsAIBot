@@ -1,6 +1,7 @@
 import time
 
 from controller.adb_api import ADBShell
+from controller.base_controller import BaseController
 from controller.config import load_config
 from controller.screen_capture import ScreenCapture
 
@@ -13,7 +14,7 @@ def to_screen(borders: list[int], changes: list[int]) -> list[int]:
             borders[1] + (borders[3] - borders[1]) * (changes[1] + 1)]
 
 
-class GameController:
+class GameController(BaseController):
     def __init__(self):
         self.adb = ADBShell()
         self.last_move = None
@@ -79,15 +80,24 @@ class GameController:
         ]
         self.shoot_center = ((borders[0] + borders[2]) // 2, (borders[1] + borders[3]) // 2)
 
-    def make_action(self, move, shoot: int, ult: bool):
-        cur_move = to_screen(self.move_border, move)
-        if not self._move_held:
-            self.adb._chain_touches(tuple(cur_move))
-            self._move_held = True
-            self._move_pos = cur_move
-        elif cur_move != self._move_pos:
-            self.adb._chain_touches(tuple(cur_move))
-            self._move_pos = cur_move
+    def make_action(self, move: int, shoot: int, ult: bool):
+        # move: 0-7 = 8 directions, 8 = stop
+        dirs = [(0, -1), (1, -1), (1, 0), (1, 1), (0, 1), (-1, 1), (-1, 0), (-1, -1)]
+        if 0 <= move <= 7:
+            cur_move = to_screen(self.move_border, dirs[move])
+            if not self._move_held:
+                self.adb._chain_touches(tuple(cur_move))
+                self._move_held = True
+                self._move_pos = cur_move
+            elif cur_move != self._move_pos:
+                self.adb._chain_touches(tuple(cur_move))
+                self._move_pos = cur_move
+        else:
+            cur_move = self._move_pos or to_screen(self.move_border, (0, 0))
+            if self._move_held:
+                self.adb._chain_touches()
+                self._move_held = False
+                self._move_pos = None
 
         if shoot < 8:
             self.adb._cmd(" && ".join([
