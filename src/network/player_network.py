@@ -29,8 +29,7 @@ class PlayerNetwork(nn.Module):
         self.move_head = nn.Sequential(
             nn.Linear(256, 128),
             nn.ReLU(),
-            nn.Linear(128, 2),
-            nn.Tanh(),
+            nn.Linear(128, 9),  # 8 discrete directions + stop
         )
         self.shoot_head = nn.Sequential(
             nn.Linear(256, 128),
@@ -50,6 +49,7 @@ class PlayerNetwork(nn.Module):
         combined = torch.cat([map_logits, hp, has_ult], 1)
         fc1_out = self.fc1(combined)
         move = self.move_head(fc1_out)
+        move = F.log_softmax(move, dim=1)
         shoot_logits = self.shoot_head(fc1_out)
         shoot = F.log_softmax(shoot_logits, dim=1)
 

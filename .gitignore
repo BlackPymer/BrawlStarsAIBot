@@ -5,6 +5,7 @@ __pycache__/
 videos/
 runs/
 datasets/
+recorded_data/
 *.pt
 *.pth
 *.onnx

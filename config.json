@@ -1,18 +1,27 @@
 {
+  "controller": "keyboard",
   "move_border": [
-    50,
-    720,
-    140,
-    820
+    0,
+    0,
+    0,
+    0
   ],
   "shoot_border": [
-    1320,
-    470,
-    1520,
-    670
+    0,
+    0,
+    0,
+    0
   ],
   "ult_center": [
-    1440,
-    710
+    0,
+    0
+  ],
+  "capture_resolution": [
+    1920,
+    1080
+  ],
+  "battle_click": [
+    1648,
+    973
   ]
 }

@@ -4,6 +4,7 @@ import os
 CONFIG_PATH = os.path.join(os.path.dirname(__file__), "..", "..", "config.json")
 
 DEFAULT_CONFIG = {
+    "controller": "keyboard",
     "move_border": [0, 0, 0, 0],
     "shoot_border": [0, 0, 0, 0],
     "ult_center": [0, 0],

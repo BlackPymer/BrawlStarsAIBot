@@ -4,19 +4,32 @@ import sys
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "src"))
 
 from controller.config import load_config
-from controller.game_controller import GameController
 from game_engine import GameEngine
 
-if __name__ == '__main__':
-    controller = GameController()
-    cfg = load_config()
-    if cfg["move_border"] == [0, 0, 0, 0]:
-        print("Borders not configured. Starting interactive setup...")
-        if not controller.setup_interactive():
-            print("Setup failed. Exiting.")
-            sys.exit(1)
+
+def make_controller(cfg):
+    ctrl_type = cfg.get("controller", "keyboard")
+    if ctrl_type == "adb":
+        from controller.game_controller import GameController
+        controller = GameController()
+        if cfg.get("move_border") == [0, 0, 0, 0]:
+            print("Borders not configured. Starting interactive setup...")
+            if not controller.setup_interactive():
+                print("Setup failed. Exiting.")
+                sys.exit(1)
+            print("Config saved:", load_config())
+        else:
+            print("Config loaded:", cfg)
     else:
-        print("Config loaded:", cfg)
+        from controller.keyboard_controller import KeyboardController
+        controller = KeyboardController()
+        print(f"Keyboard controller enabled ({ctrl_type})")
+    return controller
+
+
+if __name__ == '__main__':
+    cfg = load_config()
+    controller = make_controller(cfg)
 
     game = GameEngine()
     game.start_game(controller)
