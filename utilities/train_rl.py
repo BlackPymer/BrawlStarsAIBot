@@ -68,15 +68,49 @@ def main():
     best_ep_reward = -1e9
 
     print(f"[RL] env starting, device={DEVICE}...")
-    env.start_match()
+
+    state = None
+    done = False
+    info = {}
+    _t_last = time.time()
+    _t_frames = 0
+
+    def finalize_episode(ep_info, frames):
+        nonlocal episodes, episode_sum, episode_frames, best_ep_reward
+        episodes += 1
+        episode_logs.append(episode_sum)
+        print(f"[RL] episode {episodes}: reward={episode_sum:.3f} "
+              f"frames={frames} kills={ep_info.get('kills', 0)} "
+              f"result={ep_info.get('result', '?')} events={ep_info.get('events', [])}")
+        if episode_sum > best_ep_reward:
+            best_ep_reward = episode_sum
+            torch.save(policy.state_dict(), str(MODEL_PATH))
+            print(f"[RL] best so far, saved -> {MODEL_PATH}")
+        episode_sum = 0.0
+        episode_frames = 0
 
     try:
         for it in range(1, MAX_ITERATIONS + 1):
             if it == 1 or done:
                 state = env.reset()
+                done = False
+
+            # --- ожидание игрока: поллим кадры, награды не теряем, эпизод завершаем ---
+            guard = 0
+            while state is None and not done:
+                if guard >= 90:
+                    print("[RL] no player for too long, restarting match...")
+                    state = env.reset()
+                    guard = 0
+                    continue
+                state, reward, done, info = env.step(8, 9, False)
+                episode_sum += reward
+                episode_frames += 1
+                guard += 1
+            if done:
+                finalize_episode(info, episode_frames)
+                continue
             if state is None:
-                # игрок не найден на старте — ждём
-                time.sleep(1.0)
                 continue
 
             obs_buf = []
@@ -85,18 +119,23 @@ def main():
             don_buf = []
             val_buf = []
             logp_buf = []
-            done = False
 
             for _ in range(ROLLOUT):
-                # подождать пока появится игрок в кадре (без сохранения)
-                guard = 0
-                while state is None:
-                    state, _, done, info = env.step(8, 9, False)
-                    guard += 1
-                    if done or guard > 30:
+                # игрок пропал посреди роллаута — поллим, пока не вернётся
+                if state is None:
+                    guard = 0
+                    while state is None and not done:
+                        if guard >= 90:
+                            break
+                        state, reward, done, info = env.step(8, 9, False)
+                        episode_sum += reward
+                        episode_frames += 1
+                        guard += 1
+                    if done:
+                        finalize_episode(info, episode_frames)
                         break
-                if done or state is None:
-                    break
+                    if state is None:
+                        break
 
                 obs_t = to_device_tensors(state)
                 with torch.no_grad():
@@ -113,6 +152,7 @@ def main():
                 ult_a = bool(ult_a.item())
 
                 state, reward, done, info = env.step(move_a, shoot_a, ult_a)
+                _t_frames += 1
 
                 obs_buf.append(obs_t)
                 act_buf.append((move_a, shoot_a, int(ult_a)))
@@ -125,16 +165,7 @@ def main():
                 episode_frames += 1
 
                 if done or episode_frames >= EPISODE_MAX_FRAMES:
-                    episodes += 1
-                    episode_logs.append(episode_sum)
-                    print(f"[RL] episode {episodes}: reward={episode_sum:.3f} "
-                          f"frames={episode_frames} events={info.get('events', [])}")
-                    if episode_sum > best_ep_reward:
-                        best_ep_reward = episode_sum
-                        torch.save(policy.state_dict(), str(MODEL_PATH))
-                        print(f"[RL] best so far, saved -> {MODEL_PATH}")
-                    episode_sum = 0.0
-                    episode_frames = 0
+                    finalize_episode(info, episode_frames)
                     if done:
                         break
 
@@ -201,6 +232,14 @@ def main():
                     torch.nn.utils.clip_grad_norm_(
                         list(policy.parameters()) + list(value_net.parameters()), 0.5)
                     optimizer.step()
+
+            rew_sum = float(np.sum(rew_buf)) if rew_buf else 0.0
+            cur_fps = _t_frames / max(time.time() - _t_last, 1e-6)
+            _t_last = time.time()
+            _t_frames = 0
+            print(f"[RL] rollout #{it} steps={len(rew_buf)} reward={rew_sum:.3f} "
+                  f"mean_reward={rew_sum / max(len(rew_buf), 1):.4f} "
+                  f"episodes_done={sum(don_buf)} fps={cur_fps:.1f}")
 
             if it % LOG_EVERY == 0:
                 recent = np.mean(episode_logs[-10:]) if episode_logs else 0.0

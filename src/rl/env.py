@@ -13,7 +13,7 @@ from reward.reward_tracker import RewardTracker, MATCH_END_GRACE_FRAMES
 from ult_recognition.ult_classifier import UltClassifierRecogniser, extract_player_crop
 
 STATE_DIM = (8, 18, 28)
-FRAME_INTERVAL = 1 / 10  # ~10 fps как в record.py
+FRAME_INTERVAL = 1 / 20  # ~20 fps шаг управления
 
 
 class RLEnv:
@@ -30,6 +30,8 @@ class RLEnv:
         self.miss_frames = 0
         self.frame_width = 1920
         self.frame_height = 1080
+        self._started = False
+        self.saw_player = False
 
     def _extract_hps(self, frame, objects):
         h, w = frame.shape[:2]
@@ -57,10 +59,14 @@ class RLEnv:
                                          self.frame_width, self.frame_height, device)
 
     def start_match(self):
-        self.controller.start_game()
+        if not self._started:
+            self.controller.setup_binds()
+            self.controller.start_game()
+            self._started = True
         time.sleep(2)
         self.tracker.reset()
         self.miss_frames = 0
+        self.saw_player = False
 
     def reset(self):
         """Начинает матч и возвращает первый снимок состояния (или None)."""
@@ -120,18 +126,26 @@ class RLEnv:
         snap = parse_frame(objects, hps)
         reward, events = self.tracker.update(snap, snap["has_player"])
         player_in_frame = snap["has_player"]
+        if player_in_frame:
+            self.saw_player = True
 
-        # конец матча: игрок пропал дольше grace-периода
+        # конец матча: победа = 3+ килла за матч, иначе поражение
         done = False
-        result = self.match_end.detect(frame)
+        result = None
         if not player_in_frame:
             self.miss_frames += 1
-            if self.miss_frames > MATCH_END_GRACE_FRAMES:
-                done = True
-                if result == "win":
+            if self.saw_player and self.miss_frames > MATCH_END_GRACE_FRAMES:
+                win = self.tracker.kills >= 3
+                result = "win" if win else "loss"
+                if win:
                     reward += self.tracker.register_win()
                 else:
                     reward += self.tracker.register_death()
+                done = True
+                # последовательность кликов после матча (win: battle x2, loss: after + battle x2)
+                self.controller.restart_match(win=win)
+                self.miss_frames = 0
+                self.saw_player = False
         else:
             self.miss_frames = 0
 
@@ -141,6 +155,7 @@ class RLEnv:
             "result": result,
             "player_in_frame": player_in_frame,
             "hp": snap["player_hp"],
+            "kills": self.tracker.kills,
         }
         state = None
         if player_in_frame:

@@ -1,6 +1,5 @@
 {
   "controller": "keyboard",
-  "mode": "game",
   "move_border": [
     0,
     0,
@@ -21,8 +20,12 @@
     1920,
     1080
   ],
+  "after_match_click": [
+    962,
+    1002
+  ],
   "battle_click": [
-    1648,
-    973
+    1701,
+    992
   ]
 }

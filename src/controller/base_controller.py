@@ -13,3 +13,6 @@ class BaseController:
 
     def setup_interactive(self):
         return False
+
+    def setup_binds(self):
+        pass

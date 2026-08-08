@@ -1,3 +1,5 @@
+MODE = "rl"  # "rl" | "game" — режим запуска: rl=обучение с подкреплением, game=игра
+
 import os
 import sys
 
@@ -29,14 +31,14 @@ def make_controller(cfg):
 
 if __name__ == '__main__':
     cfg = load_config()
-    mode = cfg.get("mode", "game")
 
-    if mode == "rl":
+    if MODE == "rl":
         from utilities.train_rl import main as rl_main
         rl_main()
         sys.exit(0)
 
     controller = make_controller(cfg)
+    controller.setup_binds()
 
     game = GameEngine()
     game.start_game(controller)

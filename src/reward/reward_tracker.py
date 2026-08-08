@@ -14,6 +14,9 @@ CUBE_PICKUP_DIST = 120
 ENEMY_MATCH_DIST = 240
 BOX_MATCH_DIST = 240
 
+BLOCK_PX = 1920.0 / 28.0   # ~68.6 px — один блок из сетки состояния нейросети
+HIT_RANGE = 9.0 * BLOCK_PX  # попадания/киллы считаются только в радиусе 9 блоков
+
 # направления стрельбы 0-7 (N по часовой), конус ~45°
 SHOOT_VECTORS = {
     0: (0, -1), 1: (1, -1), 2: (1, 0), 3: (1, 1),
@@ -52,6 +55,7 @@ class RewardTracker:
         self.hits_this_window = []  # были ли попадания у активных выстрелов
         self.miss_grace = 0
         self.last_shoot = None
+        self.kills = 0
 
     # ---------- внешние события ----------
     def update(self, snap, player_in_frame):
@@ -89,15 +93,17 @@ class RewardTracker:
             if prev is None:
                 continue
             if cur["hp"] is not None and prev["hp"] is not None and cur["hp"] < prev["hp"] - 50:
-                if center is not None and any(
+                if center is not None and _dist(cur["center"], center) <= HIT_RANGE and any(
                         _in_cone(s[1], cur["center"], center) for s in self.shots):
                     events.append(("hit", REWARD_HIT))
                     shot_hit = True
 
-        # киллы: враг был и исчез
+        # киллы: враг был и исчез (только в радиусе 9 блоков)
         for eid, prev in self.enemies.items():
             if eid not in cur_enemies:
-                events.append(("kill", REWARD_KILL))
+                if center is not None and _dist(prev["center"], center) <= HIT_RANGE:
+                    events.append(("kill", REWARD_KILL))
+                    self.kills += 1
 
         # --- кубы: исчез рядом с игроком -> подбор ---
         cur_cubes = {}
@@ -110,16 +116,18 @@ class RewardTracker:
                 events.append(("powercube", REWARD_POWERCUBE))
 
         # --- боксы: исчез -> убит (грубо, без атрибуции) ---
+        # --- боксы: исчез -> убит (только в радиусе 9 блоков) ---
         cur_boxes = {}
         for ent in snap["entities"]:
             if ent["cls"] == "powercube-box":
                 cur_boxes[f"box_{len(cur_boxes)}"] = ent["center"]
         for bid, bpos in self.boxes.items():
             if bid not in cur_boxes:
-                events.append(("box_kill", REWARD_BOX_KILL))
+                if center is not None and _dist(bpos, center) <= HIT_RANGE:
+                    events.append(("box_kill", REWARD_BOX_KILL))
 
         # --- промах: выстрел в направлении, где ни у кого не убавилось HP ---
-        if self.last_shoot is not None:
+        if self.last_shoot is not None and self.last_shoot[1] is not None:
             shoot_class, shooter = self.last_shoot
             hit = any(_in_cone(shoot_class, e["center"], shooter) and e["hp"] is not None
                       for e in cur_enemies.values())

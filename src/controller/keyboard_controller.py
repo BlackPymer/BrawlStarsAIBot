@@ -108,26 +108,64 @@ class KeyboardController(BaseController):
         time.sleep(SHOOT_HOLD_SECONDS)
         self._release_shot()
 
+    def setup_binds(self):
+        """Привязывает все нужные кнопки (battle и after-match) друг за другом."""
+        self._ensure_bind("battle_click", "Battle button")
+        time.sleep(1.0)
+        self._ensure_bind("after_match_click", "After-match button")
+
     def start_game(self):
-        battle = self._config.get("battle_click", [0, 0])
-        if battle == [0, 0]:
-            print("[BOT] Battle button not configured.")
-            print("[BOT] Hover the mouse over the 'Play/Battle' button in BlueStacks and press Enter...")
-            print("[BOT] Press Esc to cancel.")
-            while True:
-                if keyboard.is_pressed("esc"):
-                    print("[BOT] Cancelled start. Exiting.")
-                    return
-                if keyboard.is_pressed("enter"):
-                    break
-                time.sleep(0.05)
-            battle = list(pyautogui.position())
-            from controller.config import save_config
-            save_config(self._config)
-            print(f"[BOT] Battle button saved: {battle}")
-        else:
-            pyautogui.click(battle[0], battle[1])
+        battle = self._ensure_bind("battle_click", "Battle button")
+        if battle is None:
+            return
+        pyautogui.click(battle[0], battle[1])
         time.sleep(MATCH_LOAD_WAIT)
+
+    def _ensure_bind(self, key, label):
+        """Возвращает [x,y] бинда, при пустом — интерактивная привязка. None если отменено."""
+        pos = self._config.get(key, [0, 0])
+        if pos != [0, 0]:
+            return pos
+        print(f"[BOT] {label} not configured.")
+        print(f"[BOT] Hover the mouse over the button and press Enter... Esc to cancel.")
+        while True:
+            if keyboard.is_pressed("esc"):
+                print("[BOT] Cancelled. Exiting.")
+                return None
+            if keyboard.is_pressed("enter"):
+                break
+            time.sleep(0.05)
+        pos = list(pyautogui.position())
+        self._config[key] = pos
+        from controller.config import save_config
+        save_config(self._config)
+        print(f"[BOT] {label} saved: {pos}")
+        return pos
+
+    def click_battle(self):
+        pos = self._ensure_bind("battle_click", "Battle button")
+        if pos:
+            pyautogui.click(pos[0], pos[1])
+
+    def restart_match(self, win: bool):
+        """После матча кликаем последовательность кнопок с паузами 2с.
+
+        Победа: battle -> 2s -> battle.
+        Поражение: after_match -> 2s -> battle -> 2s -> battle.
+        """
+        battle = self._ensure_bind("battle_click", "Battle button")
+        if battle is None:
+            return
+        if not win:
+            after = self._ensure_bind("after_match_click", "After-match button")
+            if after is None:
+                return
+            pyautogui.click(after[0], after[1])
+            time.sleep(2.0)
+        pyautogui.click(battle[0], battle[1])
+        time.sleep(2.0)
+        pyautogui.click(battle[0], battle[1])
+        time.sleep(2.0)
 
     def exit_game(self):
         self._release_all()
