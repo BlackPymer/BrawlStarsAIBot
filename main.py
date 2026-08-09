@@ -1,21 +1,46 @@
-from random import randint
+MODE = "rl"  # "rl" | "game" — режим запуска: rl=обучение с подкреплением, game=игра
 
-score = 0
-while True:
-    print("перед тобой 3 двери")
-    print("Выбери одну (1,3)")
-    try:
-        chosen_door = int(input())
-    except ValueError:
-        print("некоректный ввод")
-        continue
-    if chosen_door < 1 or chosen_door > 3:
-        print("тупой что ли")
-        continue
-    ghost_door = randint(1, 3)
-    if chosen_door != ghost_door:
-        print("повезло ска")
-        score += 1
+import os
+import sys
+
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "src"))
+
+from controller.config import load_config
+from game_engine import GameEngine
+
+
+def make_controller(cfg):
+    ctrl_type = cfg.get("controller", "keyboard")
+    if ctrl_type == "adb":
+        from controller.game_controller import GameController
+        controller = GameController()
+        if cfg.get("move_border") == [0, 0, 0, 0]:
+            print("Borders not configured. Starting interactive setup...")
+            if not controller.setup_interactive():
+                print("Setup failed. Exiting.")
+                sys.exit(1)
+            print("Config saved:", load_config())
+        else:
+            print("Config loaded:", cfg)
     else:
-        break
+        from controller.keyboard_controller import KeyboardController
+        controller = KeyboardController()
+        print(f"Keyboard controller enabled ({ctrl_type})")
+    return controller
 
+
+if __name__ == '__main__':
+    cfg = load_config()
+
+    if MODE == "rl":
+        from utilities.train_rl import main as rl_main
+        rl_main()
+        sys.exit(0)
+
+    controller = make_controller(cfg)
+    controller.setup_binds()
+
+    game = GameEngine()
+    game.start_game(controller)
+    while game.is_game:
+        game.update()

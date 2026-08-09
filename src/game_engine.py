@@ -1,40 +1,52 @@
 from controller.game_controller import GameController
-from hp_recognition.hp_recogniser import HPRecogniser, HP_PADDING
+from hp_recognition.hp_recogniser import HP_PADDING
+from hp_recognition.CRNN_hp_recogniser import CRNNHpRecogniser
 from network.exceptions import PlayerNotFoundException
 from network.network_engine import NetworkEngine
-from objects_detection.object_detector import ObjectDetector, CLASS_NAMES
+from objects_detection.object_detector import CLASS_NAMES
+from objects_detection.yolo_object_detector import YoloObjectDetector
+from ult_recognition.ult_classifier import UltClassifierRecogniser, extract_player_crop
 import time as t
 
-BULLET_RELOADING_TIME = 1.5
-MAX_BULLETS = 3
+SHOT_COOLDOWN = 0.3
 
 
 class GameEngine:
     def __init__(self):
         self.is_game = False
         self.game_controller = None
-        self.hp_recogniser = HPRecogniser()
-        self.object_detector = ObjectDetector()
-        self.bullets_number = 0
-        self.last_bullet_reloaded_time = 0
+        self.hp_recogniser = CRNNHpRecogniser()
+        self.object_detector = YoloObjectDetector()
+        self.ult_recogniser = UltClassifierRecogniser()
+        self.last_shot_time = 0
         self.network = NetworkEngine()
+        self._fps_frames = 0
+        self._fps_timer = t.time()
+        self.fps = 0.0
 
     def start_game(self, controller: GameController):
         self.game_controller = controller
         self.is_game = True
         self.game_controller.start_game()
-        self.bullets_number = MAX_BULLETS
+        self.last_shot_time = t.time()
+        self._fps_frames = 0
+        self._fps_timer = t.time()
+        print("[BOT] Game started!")
 
     def stop_game(self):
-        self.game_controller.stop_game()
+        self.game_controller.exit_game()
         self.is_game = False
 
     def update(self):
-        if self.bullets_number < MAX_BULLETS and t.time() - self.last_bullet_reloaded_time > BULLET_RELOADING_TIME:
-            self.last_bullet_reloaded_time = t.time()
-            self.bullets_number += 1
+        self._fps_frames += 1
+        if t.time() - self._fps_timer >= 1.0:
+            self.fps = self._fps_frames / (t.time() - self._fps_timer)
+            self._fps_frames = 0
+            self._fps_timer = t.time()
 
         frame = self.game_controller.get_frame()
+        if frame is None:
+            return
         objects = self.object_detector.detect(frame)
 
         hp_crops = []
@@ -51,10 +63,26 @@ class GameEngine:
                     crop = frame[cy1:cy2, cx1:cx2]
                     if crop.size > 0:
                         hp_crops.append(crop)
-        hp_texts = self.hp_recogniser.recognise(image=frame, crops=hp_crops) if hp_crops else None
-        hp_values = [int(i) for i in hp_texts]
+        hp_texts = self.hp_recogniser.recognise(image=frame, crops=hp_crops) if hp_crops else []
+        hp_values = [int(i) for i in hp_texts] if hp_texts else []
         # TODO: change 1920x1080 into real resolution
+        move_action = shoot_action = ult_action = None
         try:
-            self.network.make_action(objects, hp_values, ult=False, frame_width=1920, frame_height=1080)
+            player_crop = extract_player_crop(frame, objects)
+            has_ult = self.ult_recogniser.recognise(player_crop)
+            move_action, shoot_action, ult_action = self.network.make_action(objects, hp_values, ult=has_ult,
+                                                                             frame_width=1920, frame_height=1080)
         except PlayerNotFoundException:
             print("Player not found in current frame")
+            return
+
+        if move_action is not None and shoot_action is not None and ult_action is not None:
+            fired = False
+            if shoot_action < 9 and t.time() - self.last_shot_time > SHOT_COOLDOWN:
+                fired = True
+                self.last_shot_time = t.time()
+            else:
+                shoot_action = 9  # cooldown: suppress the shot
+            self.game_controller.make_action(move_action, shoot_action, ult_action)
+            print(f"[BOT] fps={self.fps:.1f} move={move_action} shoot={shoot_action}"
+                  f" ult={ult_action} objs={len(objects)} hp={hp_values} fired={fired}")
