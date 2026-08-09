@@ -148,11 +148,7 @@ class KeyboardController(BaseController):
             pyautogui.click(pos[0], pos[1])
 
     def restart_match(self, win: bool):
-        """После матча кликаем последовательность кнопок с паузами 2с.
-
-        Победа: battle -> 2s -> battle.
-        Поражение: after_match -> 2s -> battle -> 2s -> battle.
-        """
+        """После матча кликаем последовательность кнопок и ждём полноценную загрузку."""
         battle = self._ensure_bind("battle_click", "Battle button")
         if battle is None:
             return
@@ -162,10 +158,14 @@ class KeyboardController(BaseController):
                 return
             pyautogui.click(after[0], after[1])
             time.sleep(2.0)
+            
         pyautogui.click(battle[0], battle[1])
         time.sleep(2.0)
         pyautogui.click(battle[0], battle[1])
-        time.sleep(2.0)
+        
+        # Ждём пока игра реально подберёт игроков и пройдёт заставка
+        print(f"[BOT] Ожидание загрузки карты ({MATCH_LOAD_WAIT} сек)...")
+        time.sleep(MATCH_LOAD_WAIT)
 
     def exit_game(self):
         self._release_all()
