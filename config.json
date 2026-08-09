@@ -1,0 +1,31 @@
+{
+  "controller": "keyboard",
+  "move_border": [
+    0,
+    0,
+    0,
+    0
+  ],
+  "shoot_border": [
+    0,
+    0,
+    0,
+    0
+  ],
+  "ult_center": [
+    0,
+    0
+  ],
+  "capture_resolution": [
+    1920,
+    1080
+  ],
+  "after_match_click": [
+    962,
+    1002
+  ],
+  "battle_click": [
+    1701,
+    992
+  ]
+}
